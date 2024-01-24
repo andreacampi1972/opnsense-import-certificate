@@ -39,18 +39,10 @@ if (empty($key)) {
 	echo "The key is empty.\r\n";
 	die(1);
 }
-if (trim(cert_get_subject($certificate, false)) != "CN=".$hostname.",") {
-	echo "The certificate subject does not match the hostname $hostname.\r\n".cert_get_subject($certificate, false)."\r\n";
-	die(1);
-}
-if (trim(cert_get_issuer($certificate, false)) != "O=Let's Encrypt, CN=R3, C=US") {
-	echo "The certificate issuer does not match the certificate.\r\n".cert_get_issuer($certificate, false)."\r\n";
-	die(1);
-}
 
 $cert = array();
 $cert['refid'] = uniqid();
-$cert['descr'] = "Certificate added to opnsense through " . $argv[0] . " on " . date("Y/m/d");
+$cert['descr'] = "$hostname";
 
 cert_import($cert, $certificate, $key);
 
@@ -68,33 +60,21 @@ if (!is_array($config['cert'])) {
 
 $a_cert =& $config['cert'];
 
-$internal_ca_count = 0;
-foreach ($a_ca as $ca) {
-	if ($ca['prv']) {
-		$internal_ca_count++;
+
+// Check if the certificate we just parsed is already imported using description and substitute it with the new one
+
+foreach ($a_cert as &$existing_cert) {
+	if ($existing_cert['descr'] === $cert['descr']) {
+			$existing_cert['crt'] = $cert['crt'];
+			$existing_cert['prv'] = $cert['prv'];
+			break;
 	}
 }
-
-// Check if the certificate we just parsed is already imported (we'll check the certificate portion)
-foreach ($a_cert as $existing_cert) {
-	if ($existing_cert['crt'] === $cert['crt']) {
-		echo "The certificate is already imported.\r\n";
-		die(); // exit with a valid error code, as this is intended behaviour
-	}
-}
-
-// Append the final certificate
-$a_cert[] = $cert;
 
 // Write out the updated configuration
-write_config();
-
-// Assuming that all worked, we now need to set the new certificate for use in the GUI
-$config['system']['webgui']['ssl-certref'] = $cert['refid'];
-
 write_config();
 
 log_error('Web GUI configuration has changed. Restarting now.');
 configd_run('webgui restart 2', true);
 
-echo "Completed! New certificate installed.\r\n";
+echo "Completed! New certificate Updated installed.\r\n";
